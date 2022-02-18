@@ -2,9 +2,10 @@
 
 #include <SDL.h>
 
+#include <algorithm>
 #include <array>
 #include <iostream>
-#include <algorithm>
+#include <optional>
 
 using size_t = std::size_t;
 
@@ -52,6 +53,12 @@ struct Player {
   SDL_FPoint dir{1.0f, 0.0f};
 };
 
+struct HitRecord {
+  SDL_FPoint intersection;
+  float distance;
+  size_t cell_index;
+};
+
 using Map = std::array<int, MAP_WIDTH * MAP_HEIGHT>;
 
 struct GameState {
@@ -82,6 +89,8 @@ struct GameState {
 
 GameState state;
 
+std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir);
+
 void printSdlError(const char* title) {
   std::cerr << title << ": " << SDL_GetError() << '\n';
 }
@@ -101,11 +110,27 @@ void renderMap(SDL_Renderer* renderer) {
 
 void renderPlayer(SDL_Renderer* renderer) {
   const Player& player = state.player;
-  const int ray_len = 30;
-  SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
-  const int ray_x = player.pos.x + ray_len * player.dir.x;
-  const int ray_y = player.pos.y + ray_len * player.dir.y;
-  SDL_RenderDrawLine(renderer, player.pos.x, player.pos.y, ray_x, ray_y);
+
+  // TODO: move raycasting code in a separate functions
+  const float angle = atan2(player.dir.y, player.dir.x);
+  const float fov = M_PI / 3.0f;
+  const int width = 512;
+  for (int i = 0; i < width; ++i) {
+    const SDL_FPoint origin{player.pos.x / CELL_SIZE, player.pos.y / CELL_SIZE};
+    const float current_angle = angle - fov / 2 + i * fov / width;
+    const SDL_FPoint dir{cos(current_angle), sin(current_angle)};
+
+    const std::optional<HitRecord> hit = castRay(origin, dir);
+    if (hit.has_value()) {
+      SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
+      SDL_RenderDrawLine(renderer, player.pos.x, player.pos.y, hit.value().intersection.x * CELL_SIZE, hit.value().intersection.y * CELL_SIZE);
+      const int cell_x = hit.value().cell_index % MAP_WIDTH * CELL_SIZE;
+      const int cell_y = hit.value().cell_index / MAP_WIDTH * CELL_SIZE;
+      const SDL_Rect rect{cell_x, cell_y,
+                          CELL_SIZE, CELL_SIZE};
+      SDL_RenderDrawRect(renderer, &rect);
+    }
+  }
 
   const int player_size = 5;
   SDL_SetRenderDrawColor(renderer, 0xff, 0x00, 0x00, 0xff);
@@ -123,6 +148,63 @@ void render(SDL_Renderer* renderer) {
   renderPlayer(renderer);
 
   SDL_RenderPresent(renderer);
+}
+
+std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir) {
+  SDL_FPoint ray_unit_step_size = {sqrt(1 + (dir.y / dir.x) * (dir.y / dir.x)), sqrt(1 + (dir.x / dir.y) * (dir.x / dir.y))};
+  SDL_Point map_pos = {static_cast<int>(origin.x), static_cast<int>(origin.y)};
+  SDL_FPoint ray_len_1d;
+  SDL_FPoint step;
+
+  if (dir.x < 0) {
+    ray_len_1d.x = (origin.x - map_pos.x) * ray_unit_step_size.x;
+    step.x = -1;
+  } else {
+    ray_len_1d.x = (map_pos.x + 1.0f - origin.x) * ray_unit_step_size.x;
+    step.x = 1;
+  }
+
+  if (dir.y < 0) {
+    ray_len_1d.y = (origin.y - map_pos.y) * ray_unit_step_size.y;
+    step.y = -1;
+  } else {
+    ray_len_1d.y = (map_pos.y + 1.0f - origin.y) * ray_unit_step_size.y;
+    step.y = 1;
+  }
+
+  bool tile_found = false;
+  const float max_distance = 100.0f;
+  float distance = 0.0f;
+
+  std::optional<HitRecord> record{};
+
+  while (!tile_found && distance < max_distance) {
+    if (ray_len_1d.x < ray_len_1d.y) {
+      map_pos.x += step.x;
+      distance = ray_len_1d.x;
+      ray_len_1d.x += ray_unit_step_size.x;
+    } else {
+      map_pos.y += step.y;
+      distance = ray_len_1d.y;
+      ray_len_1d.y += ray_unit_step_size.y;
+    }
+
+    if (map_pos.x >= 0 && map_pos.x < MAP_WIDTH && map_pos.y >= 0 && map_pos.y < MAP_HEIGHT) {
+      const size_t i = map_pos.y * MAP_WIDTH + map_pos.x;
+      if (state.map[i] > 0) {
+        const float x = origin.x + dir.x * distance;
+        const float y = origin.y + dir.y * distance;
+        const SDL_FPoint intersection{x, y};
+        record = HitRecord{
+            intersection,
+            distance,
+            i};
+        tile_found = true;
+      }
+    }
+  }
+
+  return record;
 }
 
 void onMouseDown(const SDL_MouseButtonEvent& event) {
