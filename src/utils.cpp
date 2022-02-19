@@ -16,6 +16,11 @@ SDL_FPoint clamp(const SDL_FPoint& point, const SDL_FPoint& min, const SDL_FPoin
   float y = std::clamp(point.y, min.y, max.y);
   return {x, y};
 }
+
+float clamp(float v, float min, float max) {
+  return std::clamp(v, min, max);
+}
+
 float distance(const SDL_FPoint& a, const SDL_FPoint& b) {
   const float x = a.x - b.x;
   const float y = a.y - b.y;

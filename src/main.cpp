@@ -116,7 +116,7 @@ void renderMap(SDL_Renderer* renderer) {
   }
 }
 
-void renderPlayer(SDL_Renderer* renderer) {
+void renderScene(SDL_Renderer* renderer) {
   const Player& player = state.player;
 
   if (state.mode == GameMode::D3) {
@@ -150,15 +150,16 @@ void renderPlayer(SDL_Renderer* renderer) {
         SDL_RenderDrawRect(renderer, &rect);
       } else {
         const float dist = distance(player.pos, intersection);
-        float height = SCREEN_HEIGHT / dist * 20;
-        float min = 0.0;
-        float max = SCREEN_HEIGHT;
-        height = std::clamp(height, min, max);
+        const float height = clamp(SCREEN_HEIGHT / dist * 20, 0.0f, SCREEN_HEIGHT);
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
         SDL_RenderDrawLine(renderer, i, (SCREEN_HEIGHT - height) / 2, i, (SCREEN_HEIGHT + height) / 2);
       }
     }
   }
+}
+
+void renderPlayer(SDL_Renderer* renderer) {
+  const Player& player = state.player;
 
   if (state.mode == GameMode::D2) {
     const int player_size = 5;
@@ -175,6 +176,7 @@ void render(SDL_Renderer* renderer) {
   SDL_RenderClear(renderer);
 
   renderMap(renderer);
+  renderScene(renderer);
   renderPlayer(renderer);
 
   SDL_RenderPresent(renderer);
