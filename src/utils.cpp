@@ -26,3 +26,6 @@ float distance(const SDL_FPoint& a, const SDL_FPoint& b) {
   const float y = a.y - b.y;
   return sqrt(x * x + y * y);
 }
+float len2(const SDL_FPoint& point) {
+  return point.x * point.x + point.y * point.y;
+}

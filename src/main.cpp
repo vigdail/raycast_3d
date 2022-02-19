@@ -40,17 +40,19 @@ class Clock {
 };
 
 struct Input {
-  SDL_Point dir;
-
+  float vertical;
+  float horizontal;
   void clear() {
-    dir.x = 0;
-    dir.y = 0;
+    vertical = 0.0f;
+    horizontal = 0.0f;
   }
 };
 
 struct Player {
   SDL_FPoint pos{SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0};
-  SDL_FPoint dir{1.0f, 0.0f};
+  float angle{0.0f};
+  float speed{50.0f};
+  float angular_speed{3.0f};
 };
 
 struct HitRecord {
@@ -129,13 +131,11 @@ void renderScene(SDL_Renderer* renderer) {
     SDL_RenderFillRect(renderer, &rect);
   }
 
-  // TODO: move raycasting code in a separate functions
-  const float angle = atan2(player.dir.y, player.dir.x);
   const float fov = M_PI / 3.0f;
   const int width = 512;
   for (int i = 0; i < width; ++i) {
     const SDL_FPoint origin{player.pos.x / CELL_SIZE, player.pos.y / CELL_SIZE};
-    const float current_angle = angle - fov / 2 + i * fov / width;
+    const float current_angle = player.angle - fov / 2 + i * fov / width;
     const SDL_FPoint dir{cos(current_angle), sin(current_angle)};
 
     const std::optional<HitRecord> hit = castRay(origin, dir);
@@ -150,7 +150,7 @@ void renderScene(SDL_Renderer* renderer) {
         SDL_RenderDrawRect(renderer, &rect);
       } else {
         const float dist = distance(player.pos, intersection);
-        const float height = clamp(20 * SCREEN_HEIGHT / (dist * cos(current_angle - angle)), 0.0f, SCREEN_HEIGHT);
+        const float height = clamp(20 * SCREEN_HEIGHT / (dist * cos(current_angle - player.angle)), 0.0f, SCREEN_HEIGHT);
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
         SDL_RenderDrawLine(renderer, i, (SCREEN_HEIGHT - height) / 2, i, (SCREEN_HEIGHT + height) / 2);
       }
@@ -253,29 +253,29 @@ void updateInput() {
   state.input.clear();
   const Uint8* keys = SDL_GetKeyboardState(nullptr);
   if (keys[SDL_SCANCODE_W]) {
-    state.input.dir.y = -1;
+    state.input.vertical += 1;
   }
   if (keys[SDL_SCANCODE_S]) {
-    state.input.dir.y = 1;
+    state.input.vertical -= 1;
   }
   if (keys[SDL_SCANCODE_A]) {
-    state.input.dir.x = -1;
+    state.input.horizontal -= 1;
   }
   if (keys[SDL_SCANCODE_D]) {
-    state.input.dir.x = 1;
+    state.input.horizontal += 1;
   }
 }
 
 void updatePlayer(float dt) {
-  int x;
-  int y;
-  SDL_GetMouseState(&x, &y);
   auto& player = state.player;
-  player.dir = normalize({x - player.pos.x, y - player.pos.y});
+  const auto& input = state.input;
 
-  float player_speed = 50.0f;
-  player.pos.x += state.input.dir.x * player_speed * dt;
-  player.pos.y += state.input.dir.y * player_speed * dt;
+  if (std::abs(state.input.horizontal) > 0.0f) {
+    player.angle += player.angular_speed * input.horizontal * dt;
+  }
+
+  player.pos.x += cos(player.angle) * input.vertical * player.speed * dt;
+  player.pos.y += sin(player.angle) * input.vertical * player.speed * dt;
 
   player.pos = clamp(player.pos, {0, 0}, {SCREEN_WIDTH, SCREEN_HEIGHT});
 }
