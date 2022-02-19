@@ -9,8 +9,8 @@
 
 using size_t = std::size_t;
 
-constexpr int SCREEN_WIDTH = 640;
-constexpr int SCREEN_HEIGHT = 480;
+constexpr int SCREEN_WIDTH = 512;
+constexpr int SCREEN_HEIGHT = 512;
 
 constexpr size_t CELL_SIZE = 32;
 constexpr size_t MAP_WIDTH = SCREEN_WIDTH / CELL_SIZE;
@@ -49,23 +49,28 @@ struct Input {
 };
 
 struct Player {
-  SDL_FPoint pos{100.0, 100.0};
+  SDL_FPoint pos{SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0};
   SDL_FPoint dir{1.0f, 0.0f};
 };
 
 struct HitRecord {
   SDL_FPoint intersection;
-  float distance;
   size_t cell_index;
 };
 
 using Map = std::array<int, MAP_WIDTH * MAP_HEIGHT>;
+
+enum class GameMode {
+  D2,
+  D3,
+};
 
 struct GameState {
   Player player;
   Input input;
   Clock clock;
   Map map;
+  GameMode mode;
 
   GameState() {
     createMap();
@@ -96,6 +101,9 @@ void printSdlError(const char* title) {
 }
 
 void renderMap(SDL_Renderer* renderer) {
+  if (state.mode == GameMode::D3) {
+    return;
+  }
   SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
   for (size_t i = 0; i < state.map.size(); ++i) {
     if (state.map[i] == 0) {
@@ -111,6 +119,16 @@ void renderMap(SDL_Renderer* renderer) {
 void renderPlayer(SDL_Renderer* renderer) {
   const Player& player = state.player;
 
+  if (state.mode == GameMode::D3) {
+    SDL_Rect rect{0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2};
+    SDL_SetRenderDrawColor(renderer, 0xcc, 0xcc, 0xcc, 0xff);
+    SDL_RenderFillRect(renderer, &rect);
+
+    rect.y = SCREEN_HEIGHT / 2;
+    SDL_SetRenderDrawColor(renderer, 0x99, 0x99, 0x99, 0xff);
+    SDL_RenderFillRect(renderer, &rect);
+  }
+
   // TODO: move raycasting code in a separate functions
   const float angle = atan2(player.dir.y, player.dir.x);
   const float fov = M_PI / 3.0f;
@@ -122,22 +140,34 @@ void renderPlayer(SDL_Renderer* renderer) {
 
     const std::optional<HitRecord> hit = castRay(origin, dir);
     if (hit.has_value()) {
-      SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
-      SDL_RenderDrawLine(renderer, player.pos.x, player.pos.y, hit.value().intersection.x * CELL_SIZE, hit.value().intersection.y * CELL_SIZE);
-      const int cell_x = hit.value().cell_index % MAP_WIDTH * CELL_SIZE;
-      const int cell_y = hit.value().cell_index / MAP_WIDTH * CELL_SIZE;
-      const SDL_Rect rect{cell_x, cell_y,
-                          CELL_SIZE, CELL_SIZE};
-      SDL_RenderDrawRect(renderer, &rect);
+      const SDL_FPoint intersection = {hit.value().intersection.x * CELL_SIZE, hit.value().intersection.y * CELL_SIZE};
+      if (state.mode == GameMode::D2) {
+        SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
+        SDL_RenderDrawLine(renderer, player.pos.x, player.pos.y, intersection.x, intersection.y);
+        const int cell_x = hit.value().cell_index % MAP_WIDTH * CELL_SIZE;
+        const int cell_y = hit.value().cell_index / MAP_WIDTH * CELL_SIZE;
+        const SDL_Rect rect{cell_x, cell_y, CELL_SIZE, CELL_SIZE};
+        SDL_RenderDrawRect(renderer, &rect);
+      } else {
+        const float dist = distance(player.pos, intersection);
+        float height = SCREEN_HEIGHT / dist * 20;
+        float min = 0.0;
+        float max = SCREEN_HEIGHT;
+        height = std::clamp(height, min, max);
+        SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
+        SDL_RenderDrawLine(renderer, i, (SCREEN_HEIGHT - height) / 2, i, (SCREEN_HEIGHT + height) / 2);
+      }
     }
   }
 
-  const int player_size = 5;
-  SDL_SetRenderDrawColor(renderer, 0xff, 0x00, 0x00, 0xff);
-  const int x = static_cast<int>(player.pos.x - player_size / 2);
-  const int y = static_cast<int>(player.pos.y - player_size / 2);
-  SDL_Rect rect{x, y, player_size, player_size};
-  SDL_RenderFillRect(renderer, &rect);
+  if (state.mode == GameMode::D2) {
+    const int player_size = 5;
+    SDL_SetRenderDrawColor(renderer, 0xff, 0x00, 0x00, 0xff);
+    const int x = static_cast<int>(player.pos.x - player_size / 2);
+    const int y = static_cast<int>(player.pos.y - player_size / 2);
+    SDL_Rect rect{x, y, player_size, player_size};
+    SDL_RenderFillRect(renderer, &rect);
+  }
 }
 
 void render(SDL_Renderer* renderer) {
@@ -197,7 +227,6 @@ std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir
         const SDL_FPoint intersection{x, y};
         record = HitRecord{
             intersection,
-            distance,
             i};
         tile_found = true;
       }
@@ -280,6 +309,12 @@ int main() {
         case SDL_QUIT: {
           is_running = false;
           break;
+        }
+        case SDL_KEYDOWN: {
+          const SDL_KeyboardEvent& event = e.key;
+          if (event.keysym.sym == SDLK_TAB) {
+            state.mode = (GameMode)(1 - (int)state.mode);
+          }
         }
         case SDL_MOUSEBUTTONDOWN: {
           onMouseDown(e.button);
