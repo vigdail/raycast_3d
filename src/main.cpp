@@ -150,7 +150,7 @@ void renderScene(SDL_Renderer* renderer) {
         SDL_RenderDrawRect(renderer, &rect);
       } else {
         const float dist = distance(player.pos, intersection);
-        const float height = clamp(SCREEN_HEIGHT / dist * 20, 0.0f, SCREEN_HEIGHT);
+        const float height = clamp(20 * SCREEN_HEIGHT / (dist * cos(current_angle - angle)), 0.0f, SCREEN_HEIGHT);
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
         SDL_RenderDrawLine(renderer, i, (SCREEN_HEIGHT - height) / 2, i, (SCREEN_HEIGHT + height) / 2);
       }
