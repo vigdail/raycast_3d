@@ -62,17 +62,11 @@ struct HitRecord {
 
 using Map = std::array<int, MAP_WIDTH * MAP_HEIGHT>;
 
-enum class GameMode {
-  D2,
-  D3,
-};
-
 struct GameState {
   Player player;
   Input input;
   Clock clock;
   Map map;
-  GameMode mode;
 
   GameState() {
     createMap();
@@ -103,9 +97,6 @@ void printSdlError(const char* title) {
 }
 
 void renderMap(SDL_Renderer* renderer) {
-  if (state.mode == GameMode::D3) {
-    return;
-  }
   SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
   for (size_t i = 0; i < state.map.size(); ++i) {
     if (state.map[i] == 0) {
@@ -121,15 +112,13 @@ void renderMap(SDL_Renderer* renderer) {
 void renderScene(SDL_Renderer* renderer) {
   const Player& player = state.player;
 
-  if (state.mode == GameMode::D3) {
-    SDL_Rect rect{0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2};
-    SDL_SetRenderDrawColor(renderer, 0xcc, 0xcc, 0xcc, 0xff);
-    SDL_RenderFillRect(renderer, &rect);
+  SDL_Rect rect{SCREEN_WIDTH, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2};
+  SDL_SetRenderDrawColor(renderer, 0xcc, 0xcc, 0xcc, 0xff);
+  SDL_RenderFillRect(renderer, &rect);
 
-    rect.y = SCREEN_HEIGHT / 2;
-    SDL_SetRenderDrawColor(renderer, 0x99, 0x99, 0x99, 0xff);
-    SDL_RenderFillRect(renderer, &rect);
-  }
+  rect.y = SCREEN_HEIGHT / 2;
+  SDL_SetRenderDrawColor(renderer, 0x99, 0x99, 0x99, 0xff);
+  SDL_RenderFillRect(renderer, &rect);
 
   const float fov = M_PI / 3.0f;
   const int width = 512;
@@ -141,18 +130,19 @@ void renderScene(SDL_Renderer* renderer) {
     const std::optional<HitRecord> hit = castRay(origin, dir);
     if (hit.has_value()) {
       const SDL_FPoint intersection = {hit.value().intersection.x * CELL_SIZE, hit.value().intersection.y * CELL_SIZE};
-      if (state.mode == GameMode::D2) {
+      {
         SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
         SDL_RenderDrawLine(renderer, player.pos.x, player.pos.y, intersection.x, intersection.y);
         const int cell_x = hit.value().cell_index % MAP_WIDTH * CELL_SIZE;
         const int cell_y = hit.value().cell_index / MAP_WIDTH * CELL_SIZE;
         const SDL_Rect rect{cell_x, cell_y, CELL_SIZE, CELL_SIZE};
         SDL_RenderDrawRect(renderer, &rect);
-      } else {
+      }
+      {
         const float dist = distance(player.pos, intersection);
         const float height = clamp(20 * SCREEN_HEIGHT / (dist * cos(current_angle - player.angle)), 0.0f, SCREEN_HEIGHT);
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
-        SDL_RenderDrawLine(renderer, i, (SCREEN_HEIGHT - height) / 2, i, (SCREEN_HEIGHT + height) / 2);
+        SDL_RenderDrawLine(renderer, i + SCREEN_WIDTH, (SCREEN_HEIGHT - height) / 2, i + SCREEN_WIDTH, (SCREEN_HEIGHT + height) / 2);
       }
     }
   }
@@ -161,14 +151,12 @@ void renderScene(SDL_Renderer* renderer) {
 void renderPlayer(SDL_Renderer* renderer) {
   const Player& player = state.player;
 
-  if (state.mode == GameMode::D2) {
-    const int player_size = 5;
-    SDL_SetRenderDrawColor(renderer, 0xff, 0x00, 0x00, 0xff);
-    const int x = static_cast<int>(player.pos.x - player_size / 2);
-    const int y = static_cast<int>(player.pos.y - player_size / 2);
-    SDL_Rect rect{x, y, player_size, player_size};
-    SDL_RenderFillRect(renderer, &rect);
-  }
+  const int player_size = 5;
+  SDL_SetRenderDrawColor(renderer, 0xff, 0x00, 0x00, 0xff);
+  const int x = static_cast<int>(player.pos.x - player_size / 2);
+  const int y = static_cast<int>(player.pos.y - player_size / 2);
+  SDL_Rect rect{x, y, player_size, player_size};
+  SDL_RenderFillRect(renderer, &rect);
 }
 
 void render(SDL_Renderer* renderer) {
@@ -287,7 +275,7 @@ int main() {
   }
 
   SDL_Window* window = SDL_CreateWindow("Raycast 3D", SDL_WINDOWPOS_CENTERED,
-                                        SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH,
+                                        SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH * 2,
                                         SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
   if (!window) {
     printSdlError("Unable to create window");
@@ -311,12 +299,6 @@ int main() {
         case SDL_QUIT: {
           is_running = false;
           break;
-        }
-        case SDL_KEYDOWN: {
-          const SDL_KeyboardEvent& event = e.key;
-          if (event.keysym.sym == SDLK_TAB) {
-            state.mode = (GameMode)(1 - (int)state.mode);
-          }
         }
         case SDL_MOUSEBUTTONDOWN: {
           onMouseDown(e.button);
