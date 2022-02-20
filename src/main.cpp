@@ -1,3 +1,4 @@
+#include "frame_buffer.h"
 #include "texture.h"
 #include "texture_atlas.h"
 #include "utils.h"
@@ -8,8 +9,6 @@
 #include <array>
 #include <iostream>
 #include <optional>
-
-using size_t = std::size_t;
 
 constexpr int SCREEN_WIDTH = 512;
 constexpr int SCREEN_HEIGHT = 512;
@@ -121,17 +120,14 @@ void renderMap(SDL_Renderer* renderer) {
   }
 }
 
+FrameBuffer frame_buffer(SCREEN_WIDTH, SCREEN_HEIGHT);
+
 void renderScene(SDL_Renderer* renderer) {
   const Player& player = state.player;
 
   {
-    SDL_Rect rect{SCREEN_WIDTH, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2};
-    SDL_SetRenderDrawColor(renderer, 0xcc, 0xcc, 0xcc, 0xff);
-    SDL_RenderFillRect(renderer, &rect);
-
-    rect.y = SCREEN_HEIGHT / 2;
-    SDL_SetRenderDrawColor(renderer, 0x99, 0x99, 0x99, 0xff);
-    SDL_RenderFillRect(renderer, &rect);
+    frame_buffer.drawRect(0, 0, frame_buffer.getWidth(), frame_buffer.getHeight() / 2, 0xffcccccc);
+    frame_buffer.drawRect(0, frame_buffer.getHeight() / 2, frame_buffer.getWidth(), frame_buffer.getHeight() / 2, 0xff999999);
   }
 
   for (int i = 0; i < SCREEN_WIDTH; ++i) {
@@ -165,9 +161,7 @@ void renderScene(SDL_Renderer* renderer) {
         }
         const auto t = atlas.column((hit.value().cell_type - 1), 0, texture_x, height);
         for (size_t y = 0; y < height; ++y) {
-          const SDL_Color color = unpackColor(t[y]);
-          SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-          SDL_RenderDrawPoint(renderer, i + SCREEN_WIDTH, (SCREEN_HEIGHT - height) / 2 + y);
+          frame_buffer.setPixel(i, (SCREEN_HEIGHT - height) / 2 + y, t[y]);
         }
       }
     }
@@ -192,8 +186,6 @@ void render(SDL_Renderer* renderer) {
   renderMap(renderer);
   renderScene(renderer);
   renderPlayer(renderer);
-
-  SDL_RenderPresent(renderer);
 }
 
 std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir) {
@@ -321,6 +313,15 @@ int main() {
   SDL_Event e;
   state.clock.start();
 
+  SDL_Texture* frame_buffer_texture = SDL_CreateTexture(
+      renderer,
+      SDL_PIXELFORMAT_ARGB8888,
+      SDL_TEXTUREACCESS_STREAMING,
+      frame_buffer.getWidth(),
+      frame_buffer.getHeight());
+
+  SDL_Rect right_side_rect{SCREEN_WIDTH, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+
   while (is_running) {
     while (SDL_PollEvent(&e) != 0) {
       switch (e.type) {
@@ -340,6 +341,11 @@ int main() {
     updateInput();
     updatePlayer(dt);
     render(renderer);
+    SDL_UpdateTexture(frame_buffer_texture, nullptr,
+                      reinterpret_cast<const void*>(frame_buffer.getData().data()),
+                      frame_buffer.getWidth() * 4);
+    SDL_RenderCopy(renderer, frame_buffer_texture, nullptr, &right_side_rect);
+    SDL_RenderPresent(renderer);
   }
 
   SDL_DestroyWindow(window);

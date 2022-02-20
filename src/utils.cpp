@@ -33,8 +33,12 @@ float len2(const SDL_FPoint& point) {
 
 SDL_Color unpackColor(const uint32_t color) {
   const Uint8 a = color >> 24 & 0xff;
-  const Uint8 b = color >> 16 & 0xff;
+  const Uint8 r = color >> 16 & 0xff;
   const Uint8 g = color >> 8 & 0xff;
-  const Uint8 r = color & 0xff;
-  return {b,g,r,a};
+  const Uint8 b = color & 0xff;
+  return {r, g, b, a};
+}
+
+uint32_t packColor(const SDL_Color& color) {
+  return (color.a << 24) | (color.r << 16) | (color.g << 8) | color.b;
 }
