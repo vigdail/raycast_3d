@@ -1,3 +1,5 @@
+#include "texture.h"
+#include "texture_atlas.h"
 #include "utils.h"
 
 #include <SDL.h>
@@ -12,6 +14,7 @@ using size_t = std::size_t;
 constexpr int SCREEN_WIDTH = 512;
 constexpr int SCREEN_HEIGHT = 512;
 
+constexpr size_t TILES_COUNT = 3;
 constexpr size_t CELL_SIZE = 32;
 constexpr size_t MAP_WIDTH = SCREEN_WIDTH / CELL_SIZE;
 constexpr size_t MAP_HEIGHT = SCREEN_HEIGHT / CELL_SIZE;
@@ -53,14 +56,17 @@ struct Player {
   float angle{0.0f};
   float speed{50.0f};
   float angular_speed{3.0f};
+  float fov{M_PI / 3.0f};
 };
 
 struct HitRecord {
   SDL_FPoint intersection;
   size_t cell_index;
+  int cell_type;
 };
 
 using Map = std::array<int, MAP_WIDTH * MAP_HEIGHT>;
+TextureAtlas atlas(std::make_unique<Texture>(Texture::load("../assets/tileset.bmp")), 3, 1);
 
 struct GameState {
   Player player;
@@ -97,11 +103,17 @@ void printSdlError(const char* title) {
 }
 
 void renderMap(SDL_Renderer* renderer) {
-  SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
+  static const SDL_Color colors[] = {
+      {0x00, 0x00, 0xff},
+      {0x00, 0xff, 0x00},
+      {0xff, 0x00, 0x00},
+  };
   for (size_t i = 0; i < state.map.size(); ++i) {
     if (state.map[i] == 0) {
       continue;
     }
+    const auto color = colors[state.map[i] - 1];
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
     int x = static_cast<int>(i % MAP_WIDTH * CELL_SIZE);
     int y = static_cast<int>(i / MAP_WIDTH * CELL_SIZE);
     SDL_Rect rect{x, y, CELL_SIZE, CELL_SIZE};
@@ -112,19 +124,19 @@ void renderMap(SDL_Renderer* renderer) {
 void renderScene(SDL_Renderer* renderer) {
   const Player& player = state.player;
 
-  SDL_Rect rect{SCREEN_WIDTH, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2};
-  SDL_SetRenderDrawColor(renderer, 0xcc, 0xcc, 0xcc, 0xff);
-  SDL_RenderFillRect(renderer, &rect);
+  {
+    SDL_Rect rect{SCREEN_WIDTH, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2};
+    SDL_SetRenderDrawColor(renderer, 0xcc, 0xcc, 0xcc, 0xff);
+    SDL_RenderFillRect(renderer, &rect);
 
-  rect.y = SCREEN_HEIGHT / 2;
-  SDL_SetRenderDrawColor(renderer, 0x99, 0x99, 0x99, 0xff);
-  SDL_RenderFillRect(renderer, &rect);
+    rect.y = SCREEN_HEIGHT / 2;
+    SDL_SetRenderDrawColor(renderer, 0x99, 0x99, 0x99, 0xff);
+    SDL_RenderFillRect(renderer, &rect);
+  }
 
-  const float fov = M_PI / 3.0f;
-  const int width = 512;
-  for (int i = 0; i < width; ++i) {
+  for (int i = 0; i < SCREEN_WIDTH; ++i) {
+    const float current_angle = player.angle - player.fov / 2 + i * player.fov / SCREEN_WIDTH;
     const SDL_FPoint origin{player.pos.x / CELL_SIZE, player.pos.y / CELL_SIZE};
-    const float current_angle = player.angle - fov / 2 + i * fov / width;
     const SDL_FPoint dir{cos(current_angle), sin(current_angle)};
 
     const std::optional<HitRecord> hit = castRay(origin, dir);
@@ -140,9 +152,23 @@ void renderScene(SDL_Renderer* renderer) {
       }
       {
         const float dist = distance(player.pos, intersection);
-        const float height = clamp(20 * SCREEN_HEIGHT / (dist * cos(current_angle - player.angle)), 0.0f, SCREEN_HEIGHT);
-        SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xff, 0xff);
-        SDL_RenderDrawLine(renderer, i + SCREEN_WIDTH, (SCREEN_HEIGHT - height) / 2, i + SCREEN_WIDTH, (SCREEN_HEIGHT + height) / 2);
+        const float height = clamp(25 * SCREEN_HEIGHT / (dist * cos(current_angle - player.angle)), 0.0f, SCREEN_HEIGHT);
+        const size_t texture_tile_width = atlas.getFrameWidth();
+        float hit_x = hit.value().intersection.x - floor(hit.value().intersection.x + 0.5f);
+        float hit_y = hit.value().intersection.y - floor(hit.value().intersection.y + 0.5f);
+        int texture_x = hit_x * texture_tile_width;
+        if (std::abs(hit_y) > std::abs(hit_x)) {
+          texture_x = hit_y * texture_tile_width;
+        }
+        if (texture_x < 0) {
+          texture_x += texture_tile_width;
+        }
+        const auto t = atlas.column((hit.value().cell_type - 1), 0, texture_x, height);
+        for (size_t y = 0; y < height; ++y) {
+          const SDL_Color color = unpackColor(t[y]);
+          SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+          SDL_RenderDrawPoint(renderer, i + SCREEN_WIDTH, (SCREEN_HEIGHT - height) / 2 + y);
+        }
       }
     }
   }
@@ -217,7 +243,9 @@ std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir
         const SDL_FPoint intersection{x, y};
         record = HitRecord{
             intersection,
-            i};
+            i,
+            state.map[i],
+        };
         tile_found = true;
       }
     }
@@ -232,7 +260,7 @@ void onMouseDown(const SDL_MouseButtonEvent& event) {
     int y = event.y / CELL_SIZE;
     if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT) {
       int index = y * MAP_WIDTH + x;
-      state.map[index] = 1 - state.map[index];
+      state.map[index] = (state.map[index] + 1) % (TILES_COUNT + 1);
     }
   }
 }
@@ -308,8 +336,9 @@ int main() {
     }
 
     state.clock.update();
+    const float dt = state.clock.deltaTime();
     updateInput();
-    updatePlayer(state.clock.deltaTime());
+    updatePlayer(dt);
     render(renderer);
   }
 

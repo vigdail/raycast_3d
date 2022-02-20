@@ -26,6 +26,15 @@ float distance(const SDL_FPoint& a, const SDL_FPoint& b) {
   const float y = a.y - b.y;
   return sqrt(x * x + y * y);
 }
+
 float len2(const SDL_FPoint& point) {
   return point.x * point.x + point.y * point.y;
+}
+
+SDL_Color unpackColor(const uint32_t color) {
+  const Uint8 a = color >> 24 & 0xff;
+  const Uint8 b = color >> 16 & 0xff;
+  const Uint8 g = color >> 8 & 0xff;
+  const Uint8 r = color & 0xff;
+  return {b,g,r,a};
 }
