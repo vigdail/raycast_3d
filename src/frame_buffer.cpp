@@ -18,8 +18,8 @@ void FrameBuffer::drawRect(const size_t x, const size_t y, const size_t w, const
   }
 }
 
-void FrameBuffer::clear() {
-  for(auto i =0 ; i<data_.size(); ++i) {
-    data_[i] = 0xff000000;
+[[maybe_unused]] void FrameBuffer::clear() {
+  for(auto& i : data_) {
+    i = 0xff000000;
   }
 }

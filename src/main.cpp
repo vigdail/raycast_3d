@@ -10,8 +10,8 @@
 #include <iostream>
 #include <optional>
 
-constexpr int SCREEN_WIDTH = 512;
-constexpr int SCREEN_HEIGHT = 512;
+constexpr size_t SCREEN_WIDTH = 512;
+constexpr size_t SCREEN_HEIGHT = 512;
 
 constexpr size_t TILES_COUNT = 3;
 constexpr size_t CELL_SIZE = 32;
@@ -31,8 +31,8 @@ class Clock {
     now_ = SDL_GetPerformanceCounter();
   }
 
-  double deltaTime() const {
-    return (now_ - last_frame_) / static_cast<double>(SDL_GetPerformanceFrequency());
+  float deltaTime() const {
+    return static_cast<float>(now_ - last_frame_) / static_cast<float>(SDL_GetPerformanceFrequency());
   }
 
  private:
@@ -44,6 +44,7 @@ class Clock {
 struct Input {
   float vertical;
   float horizontal;
+
   void clear() {
     vertical = 0.0f;
     horizontal = 0.0f;
@@ -61,21 +62,19 @@ struct Player {
 struct HitRecord {
   SDL_FPoint intersection;
   size_t cell_index;
-  int cell_type;
+  uint32_t cell_type;
 };
 
-using Map = std::array<int, MAP_WIDTH * MAP_HEIGHT>;
+using Map = std::array<uint32_t, MAP_WIDTH * MAP_HEIGHT>;
 TextureAtlas atlas(std::make_unique<Texture>(Texture::load("../assets/tileset.bmp")), 3, 1);
 
 struct GameState {
-  Player player;
-  Input input;
-  Clock clock;
-  Map map;
+  Player player{};
+  Input input{};
+  Clock clock{};
+  Map map{};
 
-  GameState() {
-    createMap();
-  }
+  GameState() { createMap(); }
 
  private:
   void createMap() {
@@ -97,9 +96,7 @@ GameState state;
 
 std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir);
 
-void printSdlError(const char* title) {
-  std::cerr << title << ": " << SDL_GetError() << '\n';
-}
+void printSdlError(const char* title) { std::cerr << title << ": " << SDL_GetError() << '\n'; }
 
 void renderMap(SDL_Renderer* renderer) {
   static const SDL_Color colors[] = {
@@ -108,9 +105,7 @@ void renderMap(SDL_Renderer* renderer) {
       {0xff, 0x00, 0x00},
   };
   for (size_t i = 0; i < state.map.size(); ++i) {
-    if (state.map[i] == 0) {
-      continue;
-    }
+    if (state.map[i] == 0) { continue; }
     const auto color = colors[state.map[i] - 1];
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
     int x = static_cast<int>(i % MAP_WIDTH * CELL_SIZE);
@@ -127,11 +122,12 @@ void renderScene(SDL_Renderer* renderer) {
 
   {
     frame_buffer.drawRect(0, 0, frame_buffer.getWidth(), frame_buffer.getHeight() / 2, 0xffcccccc);
-    frame_buffer.drawRect(0, frame_buffer.getHeight() / 2, frame_buffer.getWidth(), frame_buffer.getHeight() / 2, 0xff999999);
+    frame_buffer.drawRect(0, frame_buffer.getHeight() / 2, frame_buffer.getWidth(), frame_buffer.getHeight() / 2,
+                          0xff999999);
   }
 
-  for (int i = 0; i < SCREEN_WIDTH; ++i) {
-    const float current_angle = player.angle - player.fov / 2 + i * player.fov / SCREEN_WIDTH;
+  for (size_t i = 0; i < SCREEN_WIDTH; ++i) {
+    const float current_angle = player.angle - player.fov / 2 + static_cast<float>(i) * player.fov / SCREEN_WIDTH;
     const SDL_FPoint origin{player.pos.x / CELL_SIZE, player.pos.y / CELL_SIZE};
     const SDL_FPoint dir{cos(current_angle), sin(current_angle)};
 
@@ -140,29 +136,25 @@ void renderScene(SDL_Renderer* renderer) {
       const SDL_FPoint intersection = {hit.value().intersection.x * CELL_SIZE, hit.value().intersection.y * CELL_SIZE};
       {
         SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
-        SDL_RenderDrawLine(renderer, player.pos.x, player.pos.y, intersection.x, intersection.y);
-        const int cell_x = hit.value().cell_index % MAP_WIDTH * CELL_SIZE;
-        const int cell_y = hit.value().cell_index / MAP_WIDTH * CELL_SIZE;
+        SDL_RenderDrawLine(renderer, static_cast<int>(player.pos.x), static_cast<int>(player.pos.y),
+                           static_cast<int>(intersection.x), static_cast<int>(intersection.y));
+        const auto cell_x = static_cast<int>(hit.value().cell_index % MAP_WIDTH * CELL_SIZE);
+        const auto cell_y = static_cast<int>(hit.value().cell_index / MAP_WIDTH * CELL_SIZE);
         const SDL_Rect rect{cell_x, cell_y, CELL_SIZE, CELL_SIZE};
         SDL_RenderDrawRect(renderer, &rect);
       }
       {
         const float dist = distance(player.pos, intersection);
-        const float height = clamp(25 * SCREEN_HEIGHT / (dist * cos(current_angle - player.angle)), 0.0f, SCREEN_HEIGHT);
-        const size_t texture_tile_width = atlas.getFrameWidth();
+        const auto height = static_cast<size_t>(
+            clamp(25 * SCREEN_HEIGHT / (dist * cos(current_angle - player.angle)), 0.0f, SCREEN_HEIGHT));
+        const auto texture_tile_width = static_cast<float>(atlas.getFrameWidth());
         float hit_x = hit.value().intersection.x - floor(hit.value().intersection.x + 0.5f);
         float hit_y = hit.value().intersection.y - floor(hit.value().intersection.y + 0.5f);
-        int texture_x = hit_x * texture_tile_width;
-        if (std::abs(hit_y) > std::abs(hit_x)) {
-          texture_x = hit_y * texture_tile_width;
-        }
-        if (texture_x < 0) {
-          texture_x += texture_tile_width;
-        }
+        auto texture_x = static_cast<int>(hit_x * texture_tile_width);
+        if (std::abs(hit_y) > std::abs(hit_x)) { texture_x = static_cast<int>(hit_y * texture_tile_width); }
+        if (texture_x < 0) { texture_x += static_cast<int>(texture_tile_width); }
         const auto t = atlas.column((hit.value().cell_type - 1), 0, texture_x, height);
-        for (size_t y = 0; y < height; ++y) {
-          frame_buffer.setPixel(i, (SCREEN_HEIGHT - height) / 2 + y, t[y]);
-        }
+        for (size_t y = 0; y < height; ++y) { frame_buffer.setPixel(i, (SCREEN_HEIGHT - height) / 2 + y, t[y]); }
       }
     }
   }
@@ -173,10 +165,38 @@ void renderPlayer(SDL_Renderer* renderer) {
 
   const int player_size = 5;
   SDL_SetRenderDrawColor(renderer, 0xff, 0x00, 0x00, 0xff);
-  const int x = static_cast<int>(player.pos.x - player_size / 2);
-  const int y = static_cast<int>(player.pos.y - player_size / 2);
+  const int x = static_cast<int>(player.pos.x - player_size / 2.0f);
+  const int y = static_cast<int>(player.pos.y - player_size / 2.0f);
   SDL_Rect rect{x, y, player_size, player_size};
   SDL_RenderFillRect(renderer, &rect);
+}
+
+void updateInput() {
+  state.input.clear();
+  const Uint8* keys = SDL_GetKeyboardState(nullptr);
+  if (keys[SDL_SCANCODE_W]) { state.input.vertical += 1; }
+  if (keys[SDL_SCANCODE_S]) { state.input.vertical -= 1; }
+  if (keys[SDL_SCANCODE_A]) { state.input.horizontal -= 1; }
+  if (keys[SDL_SCANCODE_D]) { state.input.horizontal += 1; }
+}
+
+void updatePlayer(float dt) {
+  auto& player = state.player;
+  const auto& input = state.input;
+
+  if (std::abs(state.input.horizontal) > 0.0f) { player.angle += player.angular_speed * input.horizontal * dt; }
+
+  player.pos.x += cos(player.angle) * input.vertical * player.speed * dt;
+  player.pos.y += sin(player.angle) * input.vertical * player.speed * dt;
+
+  player.pos = clamp(player.pos, {0, 0}, {SCREEN_WIDTH, SCREEN_HEIGHT});
+}
+
+void update() {
+  state.clock.update();
+  const float dt = state.clock.deltaTime();
+  updateInput();
+  updatePlayer(dt);
 }
 
 void render(SDL_Renderer* renderer) {
@@ -189,24 +209,25 @@ void render(SDL_Renderer* renderer) {
 }
 
 std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir) {
-  SDL_FPoint ray_unit_step_size = {sqrt(1 + (dir.y / dir.x) * (dir.y / dir.x)), sqrt(1 + (dir.x / dir.y) * (dir.x / dir.y))};
+  SDL_FPoint ray_unit_step_size = {sqrt(1 + (dir.y / dir.x) * (dir.y / dir.x)),
+                                   sqrt(1 + (dir.x / dir.y) * (dir.x / dir.y))};
   SDL_Point map_pos = {static_cast<int>(origin.x), static_cast<int>(origin.y)};
   SDL_FPoint ray_len_1d;
   SDL_FPoint step;
 
   if (dir.x < 0) {
-    ray_len_1d.x = (origin.x - map_pos.x) * ray_unit_step_size.x;
+    ray_len_1d.x = (origin.x - static_cast<float>(map_pos.x)) * ray_unit_step_size.x;
     step.x = -1;
   } else {
-    ray_len_1d.x = (map_pos.x + 1.0f - origin.x) * ray_unit_step_size.x;
+    ray_len_1d.x = (static_cast<float>(map_pos.x) + 1.0f - origin.x) * ray_unit_step_size.x;
     step.x = 1;
   }
 
   if (dir.y < 0) {
-    ray_len_1d.y = (origin.y - map_pos.y) * ray_unit_step_size.y;
+    ray_len_1d.y = (origin.y - static_cast<float>(map_pos.y)) * ray_unit_step_size.y;
     step.y = -1;
   } else {
-    ray_len_1d.y = (map_pos.y + 1.0f - origin.y) * ray_unit_step_size.y;
+    ray_len_1d.y = (static_cast<float>(map_pos.y) + 1.0f - origin.y) * ray_unit_step_size.y;
     step.y = 1;
   }
 
@@ -218,11 +239,11 @@ std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir
 
   while (!tile_found && distance < max_distance) {
     if (ray_len_1d.x < ray_len_1d.y) {
-      map_pos.x += step.x;
+      map_pos.x += static_cast<int>(step.x);
       distance = ray_len_1d.x;
       ray_len_1d.x += ray_unit_step_size.x;
     } else {
-      map_pos.y += step.y;
+      map_pos.y += static_cast<int>(step.y);
       distance = ray_len_1d.y;
       ray_len_1d.y += ray_unit_step_size.y;
     }
@@ -248,44 +269,38 @@ std::optional<HitRecord> castRay(const SDL_FPoint& origin, const SDL_FPoint& dir
 
 void onMouseDown(const SDL_MouseButtonEvent& event) {
   if (event.button == SDL_BUTTON_RIGHT) {
-    int x = event.x / CELL_SIZE;
-    int y = event.y / CELL_SIZE;
+    auto x = static_cast<int>(event.x / CELL_SIZE);
+    auto y = static_cast<int>(event.y / CELL_SIZE);
     if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT) {
-      int index = y * MAP_WIDTH + x;
+      size_t index = y * MAP_WIDTH + x;
       state.map[index] = (state.map[index] + 1) % (TILES_COUNT + 1);
     }
   }
 }
 
-void updateInput() {
-  state.input.clear();
-  const Uint8* keys = SDL_GetKeyboardState(nullptr);
-  if (keys[SDL_SCANCODE_W]) {
-    state.input.vertical += 1;
-  }
-  if (keys[SDL_SCANCODE_S]) {
-    state.input.vertical -= 1;
-  }
-  if (keys[SDL_SCANCODE_A]) {
-    state.input.horizontal -= 1;
-  }
-  if (keys[SDL_SCANCODE_D]) {
-    state.input.horizontal += 1;
-  }
+void present(SDL_Renderer* renderer, SDL_Texture* frame_buffer_texture, SDL_Rect& right_side_rect) {
+  SDL_UpdateTexture(frame_buffer_texture, nullptr, reinterpret_cast<const void*>(frame_buffer.getData().data()),
+                    static_cast<int>(frame_buffer.getWidth() * 4));
+  SDL_RenderCopy(renderer, frame_buffer_texture, nullptr, &right_side_rect);
+  SDL_RenderPresent(renderer);
 }
 
-void updatePlayer(float dt) {
-  auto& player = state.player;
-  const auto& input = state.input;
-
-  if (std::abs(state.input.horizontal) > 0.0f) {
-    player.angle += player.angular_speed * input.horizontal * dt;
+bool pollEvents() {
+  bool is_running = true;
+  SDL_Event e;
+  while (SDL_PollEvent(&e) != 0) {
+    switch (e.type) {
+      case SDL_QUIT: {
+        is_running = false;
+        break;
+      }
+      case SDL_MOUSEBUTTONDOWN: {
+        onMouseDown(e.button);
+        break;
+      }
+    }
   }
-
-  player.pos.x += cos(player.angle) * input.vertical * player.speed * dt;
-  player.pos.y += sin(player.angle) * input.vertical * player.speed * dt;
-
-  player.pos = clamp(player.pos, {0, 0}, {SCREEN_WIDTH, SCREEN_HEIGHT});
+  return is_running;
 }
 
 int main() {
@@ -294,58 +309,33 @@ int main() {
     exit(EXIT_FAILURE);
   }
 
-  SDL_Window* window = SDL_CreateWindow("Raycast 3D", SDL_WINDOWPOS_CENTERED,
-                                        SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH * 2,
+  SDL_Window* window = SDL_CreateWindow("Raycast 3D", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH * 2,
                                         SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
   if (!window) {
     printSdlError("Unable to create window");
     exit(EXIT_FAILURE);
   }
 
-  SDL_Renderer* renderer = SDL_CreateRenderer(
-      window, 0, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  SDL_Renderer* renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (!renderer) {
     printSdlError("Unable to create renderer");
     exit(EXIT_FAILURE);
   }
 
   bool is_running = true;
-  SDL_Event e;
   state.clock.start();
 
-  SDL_Texture* frame_buffer_texture = SDL_CreateTexture(
-      renderer,
-      SDL_PIXELFORMAT_ARGB8888,
-      SDL_TEXTUREACCESS_STREAMING,
-      frame_buffer.getWidth(),
-      frame_buffer.getHeight());
+  SDL_Texture* frame_buffer_texture =
+      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+                        static_cast<int>(frame_buffer.getWidth()), static_cast<int>(frame_buffer.getHeight()));
 
   SDL_Rect right_side_rect{SCREEN_WIDTH, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
   while (is_running) {
-    while (SDL_PollEvent(&e) != 0) {
-      switch (e.type) {
-        case SDL_QUIT: {
-          is_running = false;
-          break;
-        }
-        case SDL_MOUSEBUTTONDOWN: {
-          onMouseDown(e.button);
-          break;
-        }
-      }
-    }
-
-    state.clock.update();
-    const float dt = state.clock.deltaTime();
-    updateInput();
-    updatePlayer(dt);
+    is_running = pollEvents();
+    update();
     render(renderer);
-    SDL_UpdateTexture(frame_buffer_texture, nullptr,
-                      reinterpret_cast<const void*>(frame_buffer.getData().data()),
-                      frame_buffer.getWidth() * 4);
-    SDL_RenderCopy(renderer, frame_buffer_texture, nullptr, &right_side_rect);
-    SDL_RenderPresent(renderer);
+    present(renderer, frame_buffer_texture, right_side_rect);
   }
 
   SDL_DestroyWindow(window);

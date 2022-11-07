@@ -7,9 +7,9 @@
 class FrameBuffer {
  public:
   FrameBuffer(size_t w, size_t h) : w_{w}, h_{h}, data_(w * h) {}
-  void setPixel(const size_t x, const size_t y, const uint32_t color);
-  void drawRect(const size_t x, const size_t y, const size_t w, const size_t h, const uint32_t color);
-  void clear();
+  void setPixel(size_t x, size_t y, uint32_t color);
+  void drawRect(size_t x, size_t y, size_t w, size_t h, uint32_t color);
+  [[maybe_unused]] void clear();
   size_t getWidth() const {
     return w_;
   }

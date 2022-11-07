@@ -9,7 +9,7 @@ struct Texture {
   int h;
   std::vector<uint32_t> pixels;
 
-  Texture(const int w, const int h, const void* data);
+  Texture(int w, int h, const void* data);
   static Texture load(const std::filesystem::path& path);
-  uint32_t get(const size_t x, const size_t y) const;
+  uint32_t get(size_t x, size_t y) const;
 };

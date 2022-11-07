@@ -13,7 +13,7 @@ Texture::Texture(const int w, const int h, const void* data) : w(w), h(h) {
 
 Texture Texture::load(const std::filesystem::path& path) {
   SDL_Surface* surface = SDL_LoadBMP(path.c_str());
-  const Texture texture(surface->w, surface->h, surface->pixels);
+  Texture texture(surface->w, surface->h, surface->pixels);
   SDL_FreeSurface(surface);
 
   return texture;
